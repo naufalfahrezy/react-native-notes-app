@@ -1,21 +1,20 @@
 pipeline {
-  agent { label 'linux' }   // gunakan node Linux
+  agent any  // jalan di node Windows juga ok
 
   options {
     timestamps()
-    // Hapus ansiColor karena plugin belum ada di instance kamu
   }
 
   environment {
-    REGISTRY_CREDENTIALS = 'dockerhub-credentials'  // sesuaikan jika beda
-    COMPOSE_FILE = 'docker-compose.yml'             // ubah bila pakai file lain
+    REGISTRY_CREDENTIALS = 'dockerhub-credentials' // ganti kalau ID creds beda
+    COMPOSE_FILE = 'docker-compose.yml'            // ganti kalau pakai file lain
   }
 
   stages {
     stage('Checkout') {
       steps {
-        // Jika job "Pipeline from SCM", ini aman.
-        // Kalau "Pipeline script", ganti ke:
+        // Kalau job ini "Pipeline from SCM", ini cukup.
+        // Jika "Pipeline script", ganti ke:
         // git branch: 'main', url: 'https://github.com/naufalfahrezy/react-native-notes-app.git'
         checkout scm
       }
@@ -23,24 +22,25 @@ pipeline {
 
     stage('Verify Docker & Compose') {
       steps {
-        sh '''
-          set -e
-          docker version
+        bat '''
+        @echo off
+        docker version || exit /b 1
 
-          # Tentukan perintah compose (v2 atau v1) TANPA alias
-          if docker compose version >/dev/null 2>&1; then
-            COMPOSE="docker compose"
-            echo "Using docker compose v2"
-          elif command -v docker-compose >/dev/null 2>&1; then
-            COMPOSE="docker-compose"
-            echo "Using docker-compose v1"
-          else
-            echo "ERROR: docker compose / docker-compose tidak ditemukan"
-            exit 1
-          fi
-
-          # simpan agar stage lain tinggal baca
-          echo "$COMPOSE" > .compose_cmd
+        rem --- Deteksi compose v2 (docker compose) atau v1 (docker-compose)
+        docker compose version >NUL 2>&1
+        if %ERRORLEVEL%==0 (
+          echo docker compose> .compose_cmd
+          echo Using docker compose v2
+          goto :eof
+        )
+        docker-compose --version >NUL 2>&1
+        if %ERRORLEVEL%==0 (
+          echo docker-compose> .compose_cmd
+          echo Using docker-compose v1
+          goto :eof
+        )
+        echo ERROR: docker compose / docker-compose not found
+        exit /b 1
         '''
       }
     }
@@ -48,28 +48,29 @@ pipeline {
     stage('Login to Docker Hub') {
       steps {
         withCredentials([usernamePassword(credentialsId: env.REGISTRY_CREDENTIALS, usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-          sh 'echo "$PASS" | docker login -u "$USER" --password-stdin'
+          bat 'echo %PASS% | docker login -u %USER% --password-stdin'
         }
       }
     }
 
     stage('Build Docker Images') {
       steps {
-        sh '''
-          set -e
-          COMPOSE=$(cat .compose_cmd)
-          # --pull untuk tarik base image terbaru (opsional)
-          $COMPOSE -f "$COMPOSE_FILE" build --pull
+        bat '''
+        @echo off
+        set /p COMPOSE=<.compose_cmd
+        if "%COMPOSE%"=="" (echo Failed to read compose cmd & exit /b 1)
+        rem --pull opsional (ambil base image terbaru)
+        %COMPOSE% -f "%COMPOSE_FILE%" build --pull
         '''
       }
     }
 
     stage('Push to Docker Hub') {
       steps {
-        sh '''
-          set -e
-          COMPOSE=$(cat .compose_cmd)
-          $COMPOSE -f "$COMPOSE_FILE" push
+        bat '''
+        @echo off
+        set /p COMPOSE=<.compose_cmd
+        %COMPOSE% -f "%COMPOSE_FILE%" push
         '''
       }
     }
@@ -77,7 +78,7 @@ pipeline {
 
   post {
     always {
-      sh 'docker logout || true'
+      bat 'docker logout || ver >nul'
       cleanWs()
     }
   }
