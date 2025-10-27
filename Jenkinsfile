@@ -1,21 +1,21 @@
 pipeline {
-  agent { label 'linux' }   // pastikan node Linux-mu berlabel 'linux'
+  agent { label 'linux' }   // gunakan node Linux
 
   options {
-    ansiColor('xterm')
     timestamps()
+    // Hapus ansiColor karena plugin belum ada di instance kamu
   }
 
   environment {
-    REGISTRY_CREDENTIALS = 'dockerhub-credentials'  // ganti jika ID creds beda
-    COMPOSE_FILE = 'docker-compose.yml'             // ubah jika pakai file lain
+    REGISTRY_CREDENTIALS = 'dockerhub-credentials'  // sesuaikan jika beda
+    COMPOSE_FILE = 'docker-compose.yml'             // ubah bila pakai file lain
   }
 
   stages {
     stage('Checkout') {
       steps {
-        // Jika job ini "Pipeline from SCM", ini aman.
-        // Kalau job "Pipeline script", kamu bisa ganti ke:
+        // Jika job "Pipeline from SCM", ini aman.
+        // Kalau "Pipeline script", ganti ke:
         // git branch: 'main', url: 'https://github.com/naufalfahrezy/react-native-notes-app.git'
         checkout scm
       }
@@ -27,7 +27,7 @@ pipeline {
           set -e
           docker version
 
-          # Tentukan perintah compose yang tersedia (v2 atau v1)
+          # Tentukan perintah compose (v2 atau v1) TANPA alias
           if docker compose version >/dev/null 2>&1; then
             COMPOSE="docker compose"
             echo "Using docker compose v2"
@@ -70,31 +70,6 @@ pipeline {
           set -e
           COMPOSE=$(cat .compose_cmd)
           $COMPOSE -f "$COMPOSE_FILE" push
-        '''
-      }
-    }
-
-    // (Opsional) tambah penandaan berdasarkan tanggal & short SHA
-    // Pastikan image di docker-compose.yml sudah punya nama repository (username/repo:tag)
-    stage('Tag extra (optional)') {
-      when { expression { return fileExists(env.COMPOSE_FILE) } }
-      steps {
-        sh '''
-          set -e
-          COMMIT_SHORT=$(git rev-parse --short HEAD)
-          DATE_TAG=$(date +%Y%m%d-%H%M)
-
-          # Ambil image pertama dari compose (kalau multi-service, silakan kembangkan sesuai kebutuhan)
-          IMG=$(docker compose -f "$COMPOSE_FILE" config | awk '/image:/ {print $2}' | head -n1 || true)
-
-          if [ -n "$IMG" ]; then
-            echo "Base image dari compose: $IMG"
-            NEW_TAG="${IMG%%:*}:$DATE_TAG-$COMMIT_SHORT"
-            docker tag "$IMG" "$NEW_TAG" || true
-            docker push "$NEW_TAG" || true
-          else
-            echo "Tidak menemukan field 'image:' di compose. Lewati pen-tag-an opsional."
-          fi
         '''
       }
     }

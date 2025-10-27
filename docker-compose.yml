@@ -1,23 +1,45 @@
-version: "3.9"
+# docker-compose.yml
 services:
+  # =========================
+  # DEV / EXPO (React Native)
+  # =========================
   app:
+    image: naufalfahrezy/rn-notes:latest   # <— nama image untuk push ke Docker Hub
     build:
       context: .
-      target: dev
-    container_name: rn-notes-dev
+      target: dev                          # sesuai target di Dockerfile
     ports:
-      - "19000:19000" # Metro (Expo Go)
-      - "19001:19001" # Metro debugger
-      - "19002:19002" # Expo UI
+      - "19000:19000"  # Metro (Expo Go)
+      - "19001:19001"  # Metro debugger
+      - "19002:19002"  # Expo web UI
     environment:
       - EXPO_NO_INTERACTIVE=1
       - CHOKIDAR_USEPOLLING=1
       - WATCHPACK_POLLING=1
     volumes:
+      # Bind mount source agar hot reload jalan saat dev lokal
       - .:/app
+      # Cache node_modules agar lebih cepat & tidak mengotori host
       - node_modules_cache:/app/node_modules
-    # agar expo dapat melihat jaringan host (untuk LAN)
+    # Bridge default sudah cukup untuk akses jaringan
     network_mode: "bridge"
+    # Jalankan hanya saat dev lokal (opsional).
+    # Hanya dibutuhkan jika kamu ingin memisahkan profile; kalau tidak perlu, hapus saja baris ini.
+    profiles: ["dev"]
+
+  # =========================
+  # WEB (opsional)
+  # =========================
+  web:
+    image: naufalfahrezy/rn-notes:web      # <— tag berbeda untuk image web
+    build:
+      context: .
+      target: web                          # sesuai target di Dockerfile (Nginx + dist)
+    ports:
+      - "8080:80"                          # akses via http://localhost:8080
+    # Tidak perlu volume untuk image web
+    # profiles opsional kalau mau hanya build saat diminta
+    profiles: ["web"]
 
 volumes:
   node_modules_cache:
