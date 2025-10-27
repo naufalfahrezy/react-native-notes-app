@@ -1,0 +1,23 @@
+version: "3.9"
+services:
+  app:
+    build:
+      context: .
+      target: dev
+    container_name: rn-notes-dev
+    ports:
+      - "19000:19000" # Metro (Expo Go)
+      - "19001:19001" # Metro debugger
+      - "19002:19002" # Expo UI
+    environment:
+      - EXPO_NO_INTERACTIVE=1
+      - CHOKIDAR_USEPOLLING=1
+      - WATCHPACK_POLLING=1
+    volumes:
+      - .:/app
+      - node_modules_cache:/app/node_modules
+    # agar expo dapat melihat jaringan host (untuk LAN)
+    network_mode: "bridge"
+
+volumes:
+  node_modules_cache:
