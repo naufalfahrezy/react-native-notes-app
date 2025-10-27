@@ -1,29 +1,7 @@
 services:
-  app:
-    image: naufalfahrezy/rn-notes:latest
-    build:
-      context: .
-      target: dev
+  calculator-app:
+    build: .
+    container_name: rn-notes
     ports:
-      - "19000:19000"
-      - "19001:19001"
-      - "19002:19002"
-    environment:
-      - EXPO_NO_INTERACTIVE=1
-      - CHOKIDAR_USEPOLLING=1
-      - WATCHPACK_POLLING=1
-    volumes:
-      - .:/app
-      - node_modules_cache:/app/node_modules
-    network_mode: "bridge"
-
-  web:
-    image: naufalfahrezy/rn-notes:web
-    build:
-      context: .
-      target: web
-    ports:
-      - "8080:80"
-
-volumes:
-  node_modules_cache:
+      - "8081:80"
+    restart: unless-stopped

@@ -1,37 +1,23 @@
-# ---------- Base: Node LTS ----------
-FROM node:18-bullseye AS base
+FROM node:18-alpine AS builder
+
 WORKDIR /app
-ENV CI=true \
-    # react-native/metro + file watching dalam container
-    CHOKIDAR_USEPOLLING=true \
-    WATCHPACK_POLLING=true \
-    # agar expo-cli tidak minta interaktif
-    EXPO_NO_INTERACTIVE=1
 
-# ---------- Dev image: untuk expo/metro ----------
-FROM base AS dev
-# Copy definisi deps lebih dulu (cache-friendly)
+RUN npm install -g expo-cli
+
 COPY package*.json ./
-# install deps (pakai npm karena ada package-lock.json)
-RUN npm ci
-# Copy sisa kode
-COPY . .
-# expo dan eas sebagai dev tooling
-RUN npm i -g expo-cli eas-cli
-EXPOSE 19000 19001 19002
-# Jalankan expo (QR, LAN, web UI)
-CMD ["bash", "-lc", "expo start --tunnel"]
 
-# ---------- Web build (opsional): expo web ----------
-FROM base AS webbuild
-COPY package*.json ./
-RUN npm ci && npm i -g expo-cli
-COPY . .
-# Build web (kalau kamu mau mode web)
-RUN npx expo export --platform web --dump-sourcemap --clear
+RUN npm install
 
-# ---------- Runtime web (opsional): nginx serve hasil build) ----------
-FROM nginx:alpine AS web
-COPY --from=webbuild /app/dist /usr/share/nginx/html
+RUN npx expo install react-native-web@~0.19.6 react-dom@18.2.0 @expo/webpack-config@^19.0.0
+
+COPY . .
+
+RUN npx expo export:web
+
+FROM nginx:alpine
+
+COPY --from=builder /app/web-build /usr/share/nginx/html
+
 EXPOSE 80
+
 CMD ["nginx", "-g", "daemon off;"]
