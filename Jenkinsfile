@@ -1,5 +1,5 @@
 pipeline {
-  agent { label 'linux' }
+  agent { label 'linux' }   // pastikan node Linux-mu berlabel 'linux'
 
   options {
     ansiColor('xterm')
@@ -7,17 +7,15 @@ pipeline {
   }
 
   environment {
-    // samakan dengan Credentials ID di Jenkins kamu
-    REGISTRY_CREDENTIALS = 'dockerhub-credentials'
-    // kalau pakai beberapa compose file, bisa dipisah pakai colon: 'docker-compose.yml:docker-compose.prod.yml'
-    COMPOSE_FILE = 'docker-compose.yml'
+    REGISTRY_CREDENTIALS = 'dockerhub-credentials'  // ganti jika ID creds beda
+    COMPOSE_FILE = 'docker-compose.yml'             // ubah jika pakai file lain
   }
 
   stages {
     stage('Checkout') {
       steps {
-        // Kalau job kamu "Pipeline from SCM", ini aman.
-        // Jika job "Pipeline script", ganti ke:
+        // Jika job ini "Pipeline from SCM", ini aman.
+        // Kalau job "Pipeline script", kamu bisa ganti ke:
         // git branch: 'main', url: 'https://github.com/naufalfahrezy/react-native-notes-app.git'
         checkout scm
       }
@@ -28,17 +26,21 @@ pipeline {
         sh '''
           set -e
           docker version
-          # Cek docker compose v2 (preferred). Jika tidak ada, fallback ke docker-compose (v1).
+
+          # Tentukan perintah compose yang tersedia (v2 atau v1)
           if docker compose version >/dev/null 2>&1; then
+            COMPOSE="docker compose"
             echo "Using docker compose v2"
-          elif docker-compose version >/dev/null 2>&1; then
+          elif command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE="docker-compose"
             echo "Using docker-compose v1"
-            alias docker='docker' # no-op
-            alias docker\ compose='docker-compose'
           else
             echo "ERROR: docker compose / docker-compose tidak ditemukan"
             exit 1
           fi
+
+          # simpan agar stage lain tinggal baca
+          echo "$COMPOSE" > .compose_cmd
         '''
       }
     }
@@ -55,37 +57,41 @@ pipeline {
       steps {
         sh '''
           set -e
-          # --pull agar selalu ambil base image terbaru (opsional)
-          docker compose -f "$COMPOSE_FILE" build --pull
+          COMPOSE=$(cat .compose_cmd)
+          # --pull untuk tarik base image terbaru (opsional)
+          $COMPOSE -f "$COMPOSE_FILE" build --pull
         '''
       }
     }
 
     stage('Push to Docker Hub') {
       steps {
-        sh 'docker compose -f "$COMPOSE_FILE" push'
+        sh '''
+          set -e
+          COMPOSE=$(cat .compose_cmd)
+          $COMPOSE -f "$COMPOSE_FILE" push
+        '''
       }
     }
 
-    // (Opsional) Tambah tag berdasarkan tanggal & commit
+    // (Opsional) tambah penandaan berdasarkan tanggal & short SHA
+    // Pastikan image di docker-compose.yml sudah punya nama repository (username/repo:tag)
     stage('Tag extra (optional)') {
-      when { expression { return fileExists('docker-compose.yml') } }
+      when { expression { return fileExists(env.COMPOSE_FILE) } }
       steps {
         sh '''
           set -e
           COMMIT_SHORT=$(git rev-parse --short HEAD)
           DATE_TAG=$(date +%Y%m%d-%H%M)
 
-          # CONTOH: kalau di compose service kamu men-tag image "username/repo:latest",
-          # di sini kita bikin tag tambahan :$DATE_TAG-$COMMIT_SHORT.
-          # Ganti "service1" dan nama image di bawah sesuai compose kamu.
-          # Contoh untuk satu service bernama "app" dengan image "naufalfahrezy/rn-notes:latest":
+          # Ambil image pertama dari compose (kalau multi-service, silakan kembangkan sesuai kebutuhan)
+          IMG=$(docker compose -f "$COMPOSE_FILE" config | awk '/image:/ {print $2}' | head -n1 || true)
 
-          IMG=$(docker compose -f "$COMPOSE_FILE" config | awk '/image:/ {print $2}' | head -n1)
           if [ -n "$IMG" ]; then
             echo "Base image dari compose: $IMG"
-            docker tag "$IMG" "${IMG%%:*}:$DATE_TAG-$COMMIT_SHORT" || true
-            docker push "${IMG%%:*}:$DATE_TAG-$COMMIT_SHORT" || true
+            NEW_TAG="${IMG%%:*}:$DATE_TAG-$COMMIT_SHORT"
+            docker tag "$IMG" "$NEW_TAG" || true
+            docker push "$NEW_TAG" || true
           else
             echo "Tidak menemukan field 'image:' di compose. Lewati pen-tag-an opsional."
           fi
