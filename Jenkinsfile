@@ -2,7 +2,7 @@ pipeline {
   agent any
 
   environment {
-    IMAGE_NAME = "<dockerhub-username>/rn-notes"
+    IMAGE_NAME = "naufalfahrezy/rn-notes"
     COMMIT_SHORT = "${env.GIT_COMMIT?.take(7)}"
   }
 
